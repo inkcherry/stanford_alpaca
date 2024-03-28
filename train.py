@@ -17,12 +17,21 @@ import logging
 from dataclasses import dataclass, field
 from typing import Dict, Optional, Sequence
 
+from transformers import AutoModelForSeq2SeqLM, AutoTokenizer,AutoModelForCausalLM
+import torch
+import time
+import os
+import sys
+import argparse
+import faulthandler
+import deepspeed
+from deepspeed.accelerator.real_accelerator import get_accelerator
 import torch
 import transformers
 import utils
 from torch.utils.data import Dataset
 from transformers import Trainer
-
+import deepspeed.comm as dist
 IGNORE_INDEX = -100
 DEFAULT_PAD_TOKEN = "[PAD]"
 DEFAULT_EOS_TOKEN = "</s>"
@@ -40,6 +49,7 @@ PROMPT_DICT = {
         "### Instruction:\n{instruction}\n\n### Response:"
     ),
 }
+
 
 
 @dataclass
@@ -128,6 +138,7 @@ class SupervisedDataset(Dataset):
     """Dataset for supervised fine-tuning."""
 
     def __init__(self, data_path: str, tokenizer: transformers.PreTrainedTokenizer):
+        self.index = 0
         super(SupervisedDataset, self).__init__()
         logging.warning("Loading data...")
         list_data_dict = utils.jload(data_path)
@@ -150,6 +161,11 @@ class SupervisedDataset(Dataset):
         return len(self.input_ids)
 
     def __getitem__(self, i) -> Dict[str, torch.Tensor]:
+        
+        if self.index == (self.__len__()-1):
+            self.index=0
+        i = self.index
+        self.index+=1
         return dict(input_ids=self.input_ids[i], labels=self.labels[i])
 
 
@@ -178,8 +194,10 @@ def make_supervised_data_module(tokenizer: transformers.PreTrainedTokenizer, dat
     data_collator = DataCollatorForSupervisedDataset(tokenizer=tokenizer)
     return dict(train_dataset=train_dataset, eval_dataset=None, data_collator=data_collator)
 
-
 def train():
+    
+    
+    
     parser = transformers.HfArgumentParser((ModelArguments, DataArguments, TrainingArguments))
     model_args, data_args, training_args = parser.parse_args_into_dataclasses()
 
@@ -187,7 +205,10 @@ def train():
         model_args.model_name_or_path,
         cache_dir=training_args.cache_dir,
     )
-
+    ds_world_size = int(os.getenv('WORLD_SIZE', '0'))
+    engine = deepspeed.init_inference(model=model, mp_size=ds_world_size, dtype=torch.float16, replace_with_kernel_inject=False)
+    model = engine.module
+    
     tokenizer = transformers.AutoTokenizer.from_pretrained(
         model_args.model_name_or_path,
         cache_dir=training_args.cache_dir,
@@ -213,9 +234,12 @@ def train():
 
     data_module = make_supervised_data_module(tokenizer=tokenizer, data_args=data_args)
     trainer = Trainer(model=model, tokenizer=tokenizer, args=training_args, **data_module)
+
+    
     trainer.train()
-    trainer.save_state()
-    trainer.save_model(output_dir=training_args.output_dir)
+    
+    # trainer.save_state()
+    # trainer.save_model(output_dir=training_args.output_dir)
 
 
 if __name__ == "__main__":
