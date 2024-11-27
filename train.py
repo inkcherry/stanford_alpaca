@@ -213,8 +213,15 @@ def train():
 
     data_module = make_supervised_data_module(tokenizer=tokenizer, data_args=data_args)
     trainer = Trainer(model=model, tokenizer=tokenizer, args=training_args, **data_module)
+    
     trainer.train()
-    trainer.save_state()
+    # load&save distributed checkpoint 
+       # trainer.save_state()
+       # trainer.train(resume_from_checkpoint="out/checkpoint-3")
+    
+    # save hf model weight
+        # set ```gather_16bit_weights_on_model_save=True``` in deepspeed config
+        # trainer.save_model(output_dir=training_args.output_dir)
     trainer.save_model(output_dir=training_args.output_dir)
 
 
