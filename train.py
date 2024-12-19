@@ -223,9 +223,36 @@ def train():
         tokenizer=tokenizer,
         model=model,
     )
+    from transformers import TrainerCallback
+    def see_memory_usage(message, force=False):
+        import deepspeed.comm as dist
+        import gc, psutil
 
+        from deepspeed import get_accelerator
+        if dist.is_initialized() and not dist.get_rank() == 0:
+            return
+
+        # python doesn't do real-time garbage collection so do it explicitly to get the correct RAM reports
+        gc.collect()
+
+        # Print message except when distributed but not rank 0
+        print(message)
+        print(f"MA {round(get_accelerator().memory_allocated() / (1024 * 1024 * 1024),2 )} GB \
+            Max_MA {round(get_accelerator().max_memory_allocated() / (1024 * 1024 * 1024),2)} GB \
+            CA {round( get_accelerator().memory_reserved() / (1024 * 1024 * 1024),2)} GB \
+            Max_CA {round(get_accelerator().max_memory_reserved() / (1024 * 1024 * 1024))} GB ")
+
+        vm_stats = psutil.virtual_memory()
+        used_GB = round(((vm_stats.total - vm_stats.available) / (1024**3)), 2)
+        print(f'CPU Virtual Memory:  used = {used_GB} GB, percent = {vm_stats.percent}%')
+
+        # get the peak memory to report correct data, so reset the counter for the next call
+        get_accelerator().reset_peak_memory_stats()
+    class MemoryCallback(TrainerCallback):
+        def on_step_end(self, args, state, control, **kwargs):
+            see_memory_usage("After step end", force=True)
     data_module = make_supervised_data_module(tokenizer=tokenizer, data_args=data_args)
-    trainer = Trainer(model=model, tokenizer=tokenizer, args=training_args, **data_module)
+    trainer = Trainer(model=model, tokenizer=tokenizer, args=training_args,callbacks=[MemoryCallback], **data_module)
     
     trainer.train()
     # load&save distributed checkpoint 
