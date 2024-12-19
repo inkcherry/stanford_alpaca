@@ -5,14 +5,18 @@ num_gpus=8
 epoch=3
 mbs=2
 MODE=${1:-zero} 
-if [ "$MODE" == "zero" ]; then
+if [ "$MODE" == "zero1" ]; then
+  ZERO_STAGE=1
+  AUTOTP_SIZE=4
+  per_device_train_batch_size=$((mbs * AUTOTP_SIZE))
+elif [ "$MODE" == "zero3" ]; then
   ZERO_STAGE=3
   AUTOTP_SIZE=0
   per_device_train_batch_size=$mbs
 elif [ "$MODE" == "tp" ]; then
   ZERO_STAGE=0
   AUTOTP_SIZE=8
-  per_device_train_batch_size=$((mbs * num_gpus))
+  per_device_train_batch_size=$((mbs * AUTOTP_SIZE))
 else
   echo "error '$MODE',please use 'zero' or 'tp'。"
   exit 1
@@ -35,7 +39,6 @@ deepspeed --num_gpus $num_gpus  \
     --evaluation_strategy no \
     --save_strategy steps  \
     --save_steps 5000 \
-    --save_total_limit 1 \
     --gradient_accumulation_steps 4 \
     --learning_rate 0 \
     --learning_rate 2e-5 \

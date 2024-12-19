@@ -72,7 +72,8 @@ def smart_tokenizer_and_embedding_resize(
     Note: This is the unoptimized version that may make your embedding size not be divisible by 64.
     """
     num_new_tokens = tokenizer.add_special_tokens(special_tokens_dict)
-    model.resize_token_embeddings(len(tokenizer))
+    #this is noly for fast test.
+    model.resize_token_embeddings(len(tokenizer),mean_resizing=False)
 
     if num_new_tokens > 0:
         input_embeddings = model.get_input_embeddings().weight.data
@@ -140,8 +141,20 @@ class SupervisedDataset(Dataset):
         ]
         targets = [f"{example['output']}{tokenizer.eos_token}" for example in list_data_dict]
 
-        logging.warning("Tokenizing inputs... This may take some time...")
-        data_dict = preprocess(sources, targets, tokenizer)
+        # this is only for fast test.
+        import os,pickle
+        dataset_cache_name = "dataset_dict.pkl"
+        if os.path.exists(dataset_cache_name):
+            with open(dataset_cache_name, "rb") as file:
+                data_dict = pickle.load(file)
+                logging.warning("loaded dataset dict cache")
+        else:
+            logging.warning("Tokenizing inputs... This may take some time...")
+            data_dict = preprocess(sources, targets, tokenizer)
+            logging.warning("Saving dataset cache")
+            with open(dataset_cache_name, "wb") as file:
+                pickle.dump(data_dict, file)
+            logging.warning("Finished saving")
 
         self.input_ids = data_dict["input_ids"]
         self.labels = data_dict["labels"]
