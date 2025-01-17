@@ -5,10 +5,14 @@ num_gpus=8
 epoch=3
 mbs=2
 MODE=${1:-zero} 
-if [ "$MODE" == "zero1" ]; then
+if [ "$MODE" == "zero1tp" ]; then
   ZERO_STAGE=1
   AUTOTP_SIZE=4
   per_device_train_batch_size=$((mbs * AUTOTP_SIZE))
+elif [ "$MODE" == "zero1" ]; then
+  ZERO_STAGE=1
+  AUTOTP_SIZE=0
+  per_device_train_batch_size=$mbs
 elif [ "$MODE" == "zero3" ]; then
   ZERO_STAGE=3
   AUTOTP_SIZE=0

@@ -22,8 +22,10 @@
     },
     "zero_optimization": {
       "stage": ${zero_stage},
-      "autotp_size": ${autotp_size},
       "gather_16bit_weights_on_model_save": true
+    },
+    "tensor_parallel":{
+      "autotp_size": ${autotp_size}
     },
     "gradient_accumulation_steps": "auto",
     "gradient_clipping": "auto",
